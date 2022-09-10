@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { NextPage } from "next";
 import Head from "next/head";
 import { Table, Modal, Button, Group, TextInput, Select } from "@mantine/core";
+import { supabase } from "../utils/supabaseClient";
 
 const RowActionButtons = ({
   id,
@@ -73,26 +74,51 @@ const AddEditFacilityModal = ({ id }: { id: string | null }) => {
   );
 };
 
+type Facility = {
+  id: string;
+  name: string;
+  status: string;
+  notes: string;
+  edit: any;
+};
+
 const Admin: NextPage = () => {
   const [currentFacilityId, setCurrentFacilityId] = useState<string | null>(
     null
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const tableData = [
-    {
-      id: "1",
-      name: "Facility 1",
-      status: "Type 1",
-      notes: "Notes 1",
-      edit: (
-        <RowActionButtons
-          id="1"
-          setCurrentFacilityId={setCurrentFacilityId}
-          setIsModalOpen={setIsModalOpen}
-        />
-      ),
-    },
-  ];
+  const [tableData, setTableData] = useState<Facility[]>([]);
+
+  const getFacilities = async () => {
+    try {
+      const { data, error } = await supabase.from("facilities").select("*");
+      if (data && data.length > 0) {
+        const facilitiesAsTableData = data.map((facility: Facility) => {
+          return {
+            id: facility.id,
+            name: facility.name,
+            status: facility.status,
+            notes: facility.notes,
+            edit: (
+              <RowActionButtons
+                id={facility.id}
+                setCurrentFacilityId={setCurrentFacilityId}
+                setIsModalOpen={setIsModalOpen}
+              />
+            ),
+          };
+        });
+        setTableData(facilitiesAsTableData);
+      }
+      if (error) throw error;
+    } catch (error: any) {
+      alert(error.error_description || error.message);
+    }
+  };
+
+  useEffect(() => {
+    getFacilities();
+  }, []);
 
   const rows = tableData.map((facility) => (
     <tr key={facility.id}>
