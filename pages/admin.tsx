@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { NextPage } from "next";
 import Head from "next/head";
 import {
+  createStyles,
   Table,
   Modal,
   Button,
@@ -14,10 +15,26 @@ import {
   AppShell,
   Header,
 } from "@mantine/core";
+import { Prism } from "@mantine/prism";
 import { IconPencil, IconTrash } from "@tabler/icons";
 import { supabase } from "../utils/supabaseClient";
 import { Session } from "@supabase/supabase-js";
 import { useRouter } from "next/router";
+
+const useStyles = createStyles((theme) => ({
+  modalButtonsContainer: {
+    display: "flex",
+    width: "100%",
+    justifyContent: "center",
+    gap: theme.spacing.xl,
+  },
+
+  modalForm: {
+    display: "flex",
+    flexDirection: "column",
+    gap: theme.spacing.xs,
+  },
+}));
 
 type Facility = {
   id: string;
@@ -36,6 +53,7 @@ const AddEditFacilityModal = ({
   setIsModalOpen: (isModalOpen: boolean) => void;
   getFacilities: () => void;
 }) => {
+  const { classes } = useStyles();
   const [name, setName] = useState(facility ? facility.name : "");
   const [status, setStatus] = useState<string | null>(
     facility ? facility.status : null
@@ -63,12 +81,13 @@ const AddEditFacilityModal = ({
 
   return (
     <>
-      <form onSubmit={handleSave}>
+      <form onSubmit={handleSave} className={classes.modalForm}>
         <TextInput
           label="Name"
           placeholder="Name"
           value={name}
           onChange={(event) => setName(event.currentTarget.value)}
+          required
         />
         <Select
           data={["Open", "Closed"]}
@@ -78,14 +97,20 @@ const AddEditFacilityModal = ({
           clearable
           value={status}
           onChange={setStatus}
+          required
         />
         <TextInput
           label="Notes"
           placeholder="Notes"
           value={notes}
           onChange={(event) => setNotes(event.currentTarget.value)}
+          required
         />
-        <Button type="submit">Save</Button>
+        <Group position="center" mt="lg">
+          <Button type="submit" fullWidth>
+            Save
+          </Button>
+        </Group>
       </form>
     </>
   );
@@ -100,6 +125,8 @@ const DeleteFacilityModal = ({
   getFacilities: () => void;
   setIsModalOpen: (isModalOpen: boolean) => void;
 }) => {
+  const { classes } = useStyles();
+
   const handleDelete = async () => {
     const user = supabase.auth.user();
     if (!user) return;
@@ -115,32 +142,30 @@ const DeleteFacilityModal = ({
       }
     }
     getFacilities();
+    setIsModalOpen(false);
   };
 
   return (
     <>
-      {facility && (
-        <>
-          <Title order={2}>Delete Facility</Title>
-          <Text>Are you sure you want to delete {facility.name}?</Text>
-          <Button
-            onClick={handleDelete}
-            color="red"
-            variant="outline"
-            style={{ marginTop: 16 }}
-          >
-            Delete
-          </Button>
-          <Button
-            onClick={() => setIsModalOpen(false)}
-            color="gray"
-            variant="outline"
-            style={{ marginTop: 16 }}
-          >
-            Cancel
-          </Button>
-        </>
-      )}
+      <Text>Are you sure you want to delete {facility?.name}?</Text>
+      <div className={classes.modalButtonsContainer}>
+        <Button
+          onClick={() => setIsModalOpen(false)}
+          color="gray"
+          variant="outline"
+          style={{ marginTop: 16 }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={handleDelete}
+          color="red"
+          variant="outline"
+          style={{ marginTop: 16 }}
+        >
+          Delete
+        </Button>
+      </div>
     </>
   );
 };
@@ -149,45 +174,33 @@ const RowActionButtons = ({
   facility,
   setIsAddEditModalOpen,
   setIsDeleteModalOpen,
-  getFacilities,
+  setCurrentFacility,
 }: {
   facility: Facility | null;
   setIsAddEditModalOpen: (isModalOpen: boolean) => void;
   setIsDeleteModalOpen: (isModalOpen: boolean) => void;
-  getFacilities: () => void;
+  setCurrentFacility: (facility: Facility | null) => void;
 }) => {
   const handleDelete = async () => {
     if (facility) {
+      setCurrentFacility(facility);
       setIsDeleteModalOpen(true);
     }
-    const user = supabase.auth.user();
-    if (!user) return;
-
-    if (facility && facility.id) {
-      try {
-        await supabase
-          .from("facilities")
-          .update({ deleted: true })
-          .eq("id", facility.id);
-      } catch (error: any) {
-        console.error(error);
-      }
-    }
-    getFacilities();
   };
 
   const handleEdit = () => {
     if (facility) {
+      setCurrentFacility(facility);
       setIsAddEditModalOpen(true);
     }
   };
 
   return (
     <div style={{ display: "flex" }}>
-      <ActionIcon variant="filled" onClick={handleEdit} mr="sm">
+      <ActionIcon title="Edit" variant="filled" onClick={handleEdit} mr="sm">
         <IconPencil size={16} />
       </ActionIcon>
-      <ActionIcon variant="filled" onClick={handleDelete}>
+      <ActionIcon title="Delete" variant="filled" onClick={handleDelete}>
         <IconTrash size={16} />
       </ActionIcon>
     </div>
@@ -219,6 +232,20 @@ const FacilitiesTable = ({ tableData }: { tableData: Facility[] }) => {
   );
 };
 
+const CopyIFrameModal = () => {
+  const url = window.location.href.substring(
+    0,
+    window.location.href.length - 6
+  );
+  const iFrameString = `<iframe src=${url} width="100%" height="100%" />`;
+
+  return (
+    <>
+      <Prism language="markup">{iFrameString}</Prism>
+    </>
+  );
+};
+
 const Admin: NextPage = () => {
   const router = useRouter();
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -227,6 +254,7 @@ const Admin: NextPage = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [tableData, setTableData] = useState<Facility[]>([]);
   const [session, setSession] = useState<Session | null>(null);
+  const [isCopyIFrameModalOpen, setIsCopyIframeModalOpen] = useState(false);
 
   useEffect(() => {
     const s = supabase.auth.session();
@@ -262,13 +290,13 @@ const Admin: NextPage = () => {
             facility={facility}
             setIsAddEditModalOpen={setIsAddEditModalOpen}
             setIsDeleteModalOpen={setIsDeleteModalOpen}
-            getFacilities={getFacilities}
+            setCurrentFacility={setCurrentFacility}
           />
         ),
       };
     });
     setTableData(facilitiesAsTableData);
-  }, [getFacilities, facilities, setTableData]);
+  }, [facilities, setTableData]);
 
   useEffect(() => {
     getFacilities();
@@ -346,7 +374,24 @@ const Admin: NextPage = () => {
                 getFacilities={getFacilities}
               />
             </Modal>
+            <Modal
+              opened={isCopyIFrameModalOpen}
+              onClose={() => setIsCopyIframeModalOpen(false)}
+              title="Copy iFrame"
+              size="xl"
+            >
+              <CopyIFrameModal />
+            </Modal>
             <Group position="right">
+              <Button
+                onClick={() => {
+                  setCurrentFacility(null);
+                  setIsCopyIframeModalOpen(true);
+                }}
+                mb="xs"
+              >
+                Copy iFrame
+              </Button>
               <Button
                 onClick={() => {
                   setCurrentFacility(null);
