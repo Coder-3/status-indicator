@@ -9,6 +9,7 @@ import {
   Group,
   TextInput,
   Select,
+  MultiSelect,
   ActionIcon,
   Text,
   Title,
@@ -38,20 +39,26 @@ const useStyles = createStyles((theme) => ({
 
 type Facility = {
   id: string;
+  created_at: string;
   name: string;
   status: string;
   notes: string;
-  edit: any;
+  order: number | null;
+  deleted: boolean;
 };
 
 const AddEditFacilityModal = ({
+  facilities,
   facility,
   setIsModalOpen,
-  getFacilities,
+  setFacilities,
+  setIsUnsavedChanges,
 }: {
+  facilities: Facility[];
   facility: Facility | null;
   setIsModalOpen: (isModalOpen: boolean) => void;
-  getFacilities: () => void;
+  setFacilities: (facilities: Facility[]) => void;
+  setIsUnsavedChanges: (isUnsavedChanges: boolean) => void;
 }) => {
   const { classes } = useStyles();
   const [name, setName] = useState(facility ? facility.name : "");
@@ -60,23 +67,33 @@ const AddEditFacilityModal = ({
   );
   const [notes, setNotes] = useState(facility ? facility.notes : "");
 
-  const handleSave = async (e: any) => {
+  const handleSave = (e: any) => {
     e.preventDefault();
 
-    const user = supabase.auth.user();
-    if (!user) return;
-
     const newFacility: any = {
-      id: facility ? facility.id : undefined,
+      id: facility ? facility.id : Math.floor(Math.random() * 1000000),
+      created_at: facility ? facility.created_at : new Date().toISOString(),
       name,
       status,
       notes,
+      order: facility ? facility.order : null,
+      deleted: false,
     };
 
-    await supabase.from("facilities").upsert(newFacility);
+    if (facility) {
+      const newFacilities = facilities.map((facility) => {
+        if (facility.id === newFacility.id) {
+          return newFacility;
+        }
+        return facility;
+      });
+      setFacilities(newFacilities);
+    } else {
+      setFacilities([...facilities, newFacility]);
+    }
 
     setIsModalOpen(false);
-    getFacilities();
+    setIsUnsavedChanges(true);
   };
 
   return (
@@ -104,7 +121,6 @@ const AddEditFacilityModal = ({
           placeholder="Notes"
           value={notes}
           onChange={(event) => setNotes(event.currentTarget.value)}
-          required
         />
         <Group position="center" mt="lg">
           <Button type="submit" fullWidth>
@@ -117,31 +133,32 @@ const AddEditFacilityModal = ({
 };
 
 const DeleteFacilityModal = ({
+  facilities,
   facility,
-  getFacilities,
   setIsModalOpen,
+  setFacilities,
+  setIsUnsavedChanges
 }: {
+  facilities: Facility[];
   facility: Facility | null;
-  getFacilities: () => void;
   setIsModalOpen: (isModalOpen: boolean) => void;
+  setFacilities: (facilities: Facility[]) => void;
+  setIsUnsavedChanges: (isUnsavedChanges: boolean) => void;
 }) => {
   const { classes } = useStyles();
 
   const handleDelete = async () => {
-    const user = supabase.auth.user();
-    if (!user) return;
-
     if (facility && facility.id) {
-      try {
-        await supabase
-          .from("facilities")
-          .update({ deleted: true })
-          .eq("id", facility.id);
-      } catch (error: any) {
-        console.error(error);
-      }
+      const newFacilities = facilities.map((f) => {
+        if (f.id === facility.id) {
+          return { ...f, deleted: true };
+        } else {
+          return f;
+        }
+      });
+      setFacilities(newFacilities);
     }
-    getFacilities();
+    setIsUnsavedChanges(true);
     setIsModalOpen(false);
   };
 
@@ -207,8 +224,16 @@ const RowActionButtons = ({
   );
 };
 
-const FacilitiesTable = ({ tableData }: { tableData: Facility[] }) => {
-  const rows = tableData.map((facility) => (
+const FacilitiesTable = ({ tableData }: { tableData: any[] }) => {
+  const [status, setStatus] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+  const filteredTableData = tableData.filter((item) => {
+    const searchMatch = item.name.toLowerCase().includes(search.toLowerCase());
+    const statusMatch = status.length ? status.includes(item.status) : true;
+    return searchMatch && statusMatch;
+  });
+
+  const rows = filteredTableData.map((facility) => (
     <tr key={facility.id}>
       <td>{facility.name}</td>
       <td>{facility.status}</td>
@@ -221,8 +246,28 @@ const FacilitiesTable = ({ tableData }: { tableData: Facility[] }) => {
     <Table>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Status</th>
+          <th>
+            <TextInput
+              placeholder="Search facility name"
+              value={search}
+              onChange={(e: any) => setSearch(e.target.value)}
+              style={{ maxWidth: "300px" }}
+            />
+          </th>
+          <th>
+            <MultiSelect
+              data={[
+                { value: "Open", label: "Open" },
+                { value: "Closed", label: "Closed" },
+              ]}
+              placeholder="Status"
+              searchable
+              clearable
+              value={status}
+              onChange={setStatus}
+              style={{ maxWidth: "300px" }}
+            />
+          </th>
           <th>Notes</th>
           <th>Edit</th>
         </tr>
@@ -246,15 +291,91 @@ const CopyIFrameModal = () => {
   );
 };
 
+const PublishModal = ({
+  setIsModalOpen,
+  handlePublish,
+}: {
+  setIsModalOpen: (isModalOpen: boolean) => void;
+  handlePublish: () => void;
+}) => {
+  const { classes } = useStyles();
+
+  return (
+    <>
+      <Text>Are you sure you want to publish this page?</Text>
+      <div className={classes.modalButtonsContainer}>
+        <Button
+          onClick={() => setIsModalOpen(false)}
+          color="gray"
+          variant="outline"
+          style={{ marginTop: 16 }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={handlePublish}
+          color="green"
+          variant="outline"
+          style={{ marginTop: 16 }}
+        >
+          Publish
+        </Button>
+      </div>
+    </>
+  );
+};
+
+const RefreshModal = ({
+  setIsModalOpen,
+  getFacilities,
+}: {
+  setIsModalOpen: (isModalOpen: boolean) => void;
+  getFacilities: () => void;
+}) => {
+  const { classes } = useStyles();
+
+  return (
+    <>
+      <Text>Are you sure you want to refresh this page? Any unplished changes will be lost</Text>
+      <div className={classes.modalButtonsContainer}>
+        <Button
+          onClick={() => setIsModalOpen(false)}
+          color="gray"
+          variant="outline"
+          style={{ marginTop: 16 }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={
+            () => {
+              setIsModalOpen(false);
+              getFacilities();
+            }
+          }
+          color="green"
+          variant="outline"
+          style={{ marginTop: 16 }}
+        >
+          Refresh
+        </Button>
+      </div>
+    </>
+  );
+};
+
 const Admin: NextPage = () => {
   const router = useRouter();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [currentFacility, setCurrentFacility] = useState<Facility | null>(null);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [tableData, setTableData] = useState<Facility[]>([]);
+  const [tableData, setTableData] = useState<any[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [isCopyIFrameModalOpen, setIsCopyIframeModalOpen] = useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
+  const [isUnsavedChanges, setIsUnsavedChanges] = useState(false);
 
   useEffect(() => {
     const s = supabase.auth.session();
@@ -279,22 +400,24 @@ const Admin: NextPage = () => {
   }, [setFacilities]);
 
   const createTableData = useCallback(() => {
-    const facilitiesAsTableData = facilities.map((facility: Facility) => {
-      return {
-        id: facility.id,
-        name: facility.name,
-        status: facility.status,
-        notes: facility.notes,
-        edit: (
-          <RowActionButtons
-            facility={facility}
-            setIsAddEditModalOpen={setIsAddEditModalOpen}
-            setIsDeleteModalOpen={setIsDeleteModalOpen}
-            setCurrentFacility={setCurrentFacility}
-          />
-        ),
-      };
-    });
+    const facilitiesAsTableData = facilities
+      .filter((facility) => facility.deleted === false)
+      .map((facility: Facility) => {
+        return {
+          id: facility.id,
+          name: facility.name,
+          status: facility.status,
+          notes: facility.notes,
+          edit: (
+            <RowActionButtons
+              facility={facility}
+              setIsAddEditModalOpen={setIsAddEditModalOpen}
+              setIsDeleteModalOpen={setIsDeleteModalOpen}
+              setCurrentFacility={setCurrentFacility}
+            />
+          ),
+        };
+      });
     setTableData(facilitiesAsTableData);
   }, [facilities, setTableData]);
 
@@ -318,6 +441,21 @@ const Admin: NextPage = () => {
     await supabase.auth.signOut();
     setSession(null);
     router.push("/login");
+  };
+
+  const handlePublish = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("facilities")
+        .upsert(facilities);
+      if (error) throw error;
+      if (data) {
+        setIsPublishModalOpen(false);
+        setIsUnsavedChanges(false);
+      }
+    } catch (error: any) {
+      alert(error.error_description || error.message);
+    }
   };
 
   return (
@@ -358,9 +496,11 @@ const Admin: NextPage = () => {
               title={currentFacility ? "Edit Facility" : "Add Facility"}
             >
               <AddEditFacilityModal
+                facilities={facilities}
                 facility={currentFacility}
                 setIsModalOpen={setIsAddEditModalOpen}
-                getFacilities={getFacilities}
+                setFacilities={setFacilities}
+                setIsUnsavedChanges={setIsUnsavedChanges}
               />
             </Modal>
             <Modal
@@ -369,9 +509,11 @@ const Admin: NextPage = () => {
               title="Delete Facility"
             >
               <DeleteFacilityModal
+                facilities={facilities}
                 facility={currentFacility}
                 setIsModalOpen={setIsDeleteModalOpen}
-                getFacilities={getFacilities}
+                setFacilities={setFacilities}
+                setIsUnsavedChanges={setIsUnsavedChanges}
               />
             </Modal>
             <Modal
@@ -382,7 +524,36 @@ const Admin: NextPage = () => {
             >
               <CopyIFrameModal />
             </Modal>
+            <Modal
+              opened={isPublishModalOpen}
+              onClose={() => setIsPublishModalOpen(false)}
+              title="Publish"
+            >
+              <PublishModal
+                setIsModalOpen={setIsPublishModalOpen}
+                handlePublish={handlePublish}
+              />
+            </Modal>
+            <Modal
+              opened={isRefreshModalOpen}
+              onClose={() => setIsRefreshModalOpen(false)}
+              title="Refresh"
+            >
+              <RefreshModal
+                setIsModalOpen={setIsRefreshModalOpen}
+                getFacilities={getFacilities}
+              />
+            </Modal>
             <Group position="right">
+              {isUnsavedChanges ? (
+                <Button onClick={() => setIsRefreshModalOpen(true)} mb="xs">
+                  Refresh
+                </Button>
+              ): (
+                <Button onClick={getFacilities} mb="xs">
+                  Refresh
+                </Button>
+              )}
               <Button
                 onClick={() => {
                   setCurrentFacility(null);
@@ -400,6 +571,9 @@ const Admin: NextPage = () => {
                 mb="xs"
               >
                 Add Facility
+              </Button>
+              <Button disabled={!isUnsavedChanges} onClick={() => setIsPublishModalOpen(true)} mb="xs">
+                Publish
               </Button>
             </Group>
             <FacilitiesTable tableData={tableData} />
