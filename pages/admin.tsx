@@ -15,12 +15,24 @@ import {
   Title,
   AppShell,
   Header,
+  Card,
+  Badge,
+  Affix,
+  Textarea,
 } from "@mantine/core";
 import { Prism } from "@mantine/prism";
-import { IconPencil, IconTrash } from "@tabler/icons";
+import {
+  IconPencil,
+  IconTrash,
+  IconRefresh,
+  IconCopy,
+  IconPlus,
+  IconWorldUpload,
+} from "@tabler/icons";
 import { supabase } from "../utils/supabaseClient";
 import { Session } from "@supabase/supabase-js";
 import { useRouter } from "next/router";
+import { useMediaQuery } from "@mantine/hooks";
 
 const useStyles = createStyles((theme) => ({
   modalButtonsContainer: {
@@ -116,11 +128,12 @@ const AddEditFacilityModal = ({
           onChange={setStatus}
           required
         />
-        <TextInput
+        <Textarea
           label="Notes"
           placeholder="Notes"
           value={notes}
           onChange={(event) => setNotes(event.currentTarget.value)}
+          minRows={8}
         />
         <Group position="center" mt="lg">
           <Button type="submit" fullWidth>
@@ -137,7 +150,7 @@ const DeleteFacilityModal = ({
   facility,
   setIsModalOpen,
   setFacilities,
-  setIsUnsavedChanges
+  setIsUnsavedChanges,
 }: {
   facilities: Facility[];
   facility: Facility | null;
@@ -189,11 +202,13 @@ const DeleteFacilityModal = ({
 
 const RowActionButtons = ({
   facility,
+  isMobile,
   setIsAddEditModalOpen,
   setIsDeleteModalOpen,
   setCurrentFacility,
 }: {
   facility: Facility | null;
+  isMobile: boolean;
   setIsAddEditModalOpen: (isModalOpen: boolean) => void;
   setIsDeleteModalOpen: (isModalOpen: boolean) => void;
   setCurrentFacility: (facility: Facility | null) => void;
@@ -213,12 +228,33 @@ const RowActionButtons = ({
   };
 
   return (
-    <div style={{ display: "flex" }}>
-      <ActionIcon title="Edit" variant="filled" onClick={handleEdit} mr="sm">
-        <IconPencil size={16} />
+    <div
+      style={{
+        display: "flex",
+        height: "100%",
+        alignItems: "center",
+        flexDirection: isMobile ? "column" : "row",
+        justifyContent: isMobile ? "center" : "flex-start",
+        margin: isMobile ? 10 : 0,
+        gap: isMobile ? 10 : 0,
+      }}
+    >
+      <ActionIcon
+        size="xl"
+        title="Edit"
+        variant="filled"
+        onClick={handleEdit}
+        mr={isMobile ? 0 : "sm"}
+      >
+        <IconPencil size={18} />
       </ActionIcon>
-      <ActionIcon title="Delete" variant="filled" onClick={handleDelete}>
-        <IconTrash size={16} />
+      <ActionIcon
+        size="xl"
+        title="Delete"
+        variant="filled"
+        onClick={handleDelete}
+      >
+        <IconTrash size={18} />
       </ActionIcon>
     </div>
   );
@@ -282,7 +318,13 @@ const CopyIFrameModal = () => {
     0,
     window.location.href.length - 6
   );
-  const iFrameString = `<iframe src=${url} width="100%" height="100%" />`;
+  const iFrameString = `
+  <iframe
+  src=${url}
+  width="100%"
+  height="100%"
+></iframe>
+  `;
 
   return (
     <>
@@ -336,7 +378,10 @@ const RefreshModal = ({
 
   return (
     <>
-      <Text>Are you sure you want to refresh this page? Any unplished changes will be lost</Text>
+      <Text>
+        Are you sure you want to refresh this page? Any unplished changes will
+        be lost
+      </Text>
       <div className={classes.modalButtonsContainer}>
         <Button
           onClick={() => setIsModalOpen(false)}
@@ -347,12 +392,10 @@ const RefreshModal = ({
           Cancel
         </Button>
         <Button
-          onClick={
-            () => {
-              setIsModalOpen(false);
-              getFacilities();
-            }
-          }
+          onClick={() => {
+            setIsModalOpen(false);
+            getFacilities();
+          }}
           color="green"
           variant="outline"
           style={{ marginTop: 16 }}
@@ -361,6 +404,78 @@ const RefreshModal = ({
         </Button>
       </div>
     </>
+  );
+};
+
+const MobileFacility = ({ facility }: { facility: any }) => {
+  return (
+    <>
+      <Card withBorder style={{ width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+          >
+            <Title order={3}>{facility.name}</Title>
+            <Text>{facility.notes}</Text>
+            <Badge
+              color={facility.status === "Open" ? "green" : "red"}
+              style={{ width: "100px" }}
+            >
+              {facility.status}
+            </Badge>
+          </div>
+          <div>{facility.edit}</div>
+        </div>
+      </Card>
+    </>
+  );
+};
+
+const MobileFacilities = ({ tableData }: { tableData: any[] }) => {
+  const [status, setStatus] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+  const filteredTableData = tableData.filter((item) => {
+    const searchMatch = item.name.toLowerCase().includes(search.toLowerCase());
+    const statusMatch = status.length ? status.includes(item.status) : true;
+    return searchMatch && statusMatch;
+  });
+
+  const rows = filteredTableData.map((facility) => (
+    <MobileFacility key={facility.id} facility={facility} />
+  ));
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        alignItems: "center",
+        paddingBottom: 80,
+      }}
+    >
+      <TextInput
+        placeholder="Search facility name"
+        value={search}
+        onChange={(e: any) => setSearch(e.target.value)}
+        style={{ width: "100%" }}
+        size="lg"
+      />
+      <MultiSelect
+        data={[
+          { value: "Open", label: "Open" },
+          { value: "Closed", label: "Closed" },
+        ]}
+        placeholder="Status"
+        searchable
+        clearable
+        value={status}
+        onChange={setStatus}
+        style={{ width: "100%" }}
+        size="lg"
+      />
+      {rows}
+    </div>
   );
 };
 
@@ -376,6 +491,7 @@ const Admin: NextPage = () => {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [isUnsavedChanges, setIsUnsavedChanges] = useState(false);
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   useEffect(() => {
     const s = supabase.auth.session();
@@ -411,6 +527,7 @@ const Admin: NextPage = () => {
           edit: (
             <RowActionButtons
               facility={facility}
+              isMobile={isMobile}
               setIsAddEditModalOpen={setIsAddEditModalOpen}
               setIsDeleteModalOpen={setIsDeleteModalOpen}
               setCurrentFacility={setCurrentFacility}
@@ -419,7 +536,7 @@ const Admin: NextPage = () => {
         };
       });
     setTableData(facilitiesAsTableData);
-  }, [facilities, setTableData]);
+  }, [facilities, isMobile]);
 
   useEffect(() => {
     getFacilities();
@@ -473,7 +590,9 @@ const Admin: NextPage = () => {
               px="md"
             >
               <div>
-                <Title order={2}>Status Indicator</Title>
+                <Title order={1} size={isMobile ? "h4" : "h2"}>
+                  Status Indicator
+                </Title>
               </div>
               <div>
                 <Button onClick={handleSignout} color="gray" variant="outline">
@@ -482,6 +601,12 @@ const Admin: NextPage = () => {
               </div>
             </Header>
           }
+          styles={(theme) => ({
+            main: {
+              paddingLeft: isMobile ? theme.spacing.sm : theme.spacing.lg,
+              paddingRight: isMobile ? theme.spacing.sm : theme.spacing.lg,
+            },
+          })}
         >
           <Head>
             <title>Status Indicator</title>
@@ -489,7 +614,7 @@ const Admin: NextPage = () => {
             <link rel="icon" href="/favicon.ico" />
           </Head>
 
-          <main style={{ margin: 10 }}>
+          <main>
             <Modal
               opened={isAddEditModalOpen}
               onClose={() => setIsAddEditModalOpen(false)}
@@ -520,7 +645,6 @@ const Admin: NextPage = () => {
               opened={isCopyIFrameModalOpen}
               onClose={() => setIsCopyIframeModalOpen(false)}
               title="Copy iFrame"
-              size="xl"
             >
               <CopyIFrameModal />
             </Modal>
@@ -545,38 +669,115 @@ const Admin: NextPage = () => {
               />
             </Modal>
             <Group position="right">
-              {isUnsavedChanges ? (
-                <Button onClick={() => setIsRefreshModalOpen(true)} mb="xs">
-                  Refresh
-                </Button>
-              ): (
-                <Button onClick={getFacilities} mb="xs">
-                  Refresh
-                </Button>
+              {!isMobile ? (
+                <div style={{ display: "flex" }}>
+                  {isUnsavedChanges ? (
+                    <Button onClick={() => setIsRefreshModalOpen(true)} mb="xs">
+                      Refresh
+                    </Button>
+                  ) : (
+                    <Button onClick={getFacilities} mb="xs">
+                      Refresh
+                    </Button>
+                  )}
+                  <Button
+                    onClick={() => {
+                      setCurrentFacility(null);
+                      setIsCopyIframeModalOpen(true);
+                    }}
+                    mb="xs"
+                  >
+                    Copy iFrame
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setCurrentFacility(null);
+                      setIsAddEditModalOpen(true);
+                    }}
+                    mb="xs"
+                  >
+                    Add Facility
+                  </Button>
+                  <Button
+                    disabled={!isUnsavedChanges}
+                    onClick={() => setIsPublishModalOpen(true)}
+                    mb="xs"
+                  >
+                    Publish
+                  </Button>
+                </div>
+              ) : (
+                <Affix style={{ width: "100%" }} position={{ bottom: 0 }}>
+                  <Card
+                    withBorder
+                    style={{
+                      display: "flex",
+                      width: "100%",
+                      justifyContent: "center",
+                      gap: 10,
+                      backgroundColor: "#f5f5f5",
+                    }}
+                  >
+                    {isUnsavedChanges ? (
+                      <ActionIcon
+                        title="Refresh"
+                        variant="filled"
+                        size="xl"
+                        onClick={() => setIsRefreshModalOpen(true)}
+                      >
+                        <IconRefresh />
+                      </ActionIcon>
+                    ) : (
+                      <ActionIcon
+                        title="Refresh"
+                        variant="filled"
+                        size="xl"
+                        onClick={getFacilities}
+                      >
+                        <IconRefresh />
+                      </ActionIcon>
+                    )}
+                    <ActionIcon
+                      title="Copy iFrame"
+                      variant="filled"
+                      size="xl"
+                      onClick={() => {
+                        setCurrentFacility(null);
+                        setIsCopyIframeModalOpen(true);
+                      }}
+                    >
+                      <IconCopy />
+                    </ActionIcon>
+                    <ActionIcon
+                      title="Add Facility"
+                      variant="filled"
+                      size="xl"
+                      onClick={() => {
+                        setCurrentFacility(null);
+                        setIsAddEditModalOpen(true);
+                      }}
+                    >
+                      <IconPlus />
+                    </ActionIcon>
+                    <ActionIcon
+                      title="Publish"
+                      variant="filled"
+                      size="xl"
+                      disabled={!isUnsavedChanges}
+                      onClick={() => setIsPublishModalOpen(true)}
+                    >
+                      <IconWorldUpload />
+                    </ActionIcon>
+                  </Card>
+                </Affix>
               )}
-              <Button
-                onClick={() => {
-                  setCurrentFacility(null);
-                  setIsCopyIframeModalOpen(true);
-                }}
-                mb="xs"
-              >
-                Copy iFrame
-              </Button>
-              <Button
-                onClick={() => {
-                  setCurrentFacility(null);
-                  setIsAddEditModalOpen(true);
-                }}
-                mb="xs"
-              >
-                Add Facility
-              </Button>
-              <Button disabled={!isUnsavedChanges} onClick={() => setIsPublishModalOpen(true)} mb="xs">
-                Publish
-              </Button>
             </Group>
-            <FacilitiesTable tableData={tableData} />
+            <div style={{ display: isMobile ? "none" : "" }}>
+              <FacilitiesTable tableData={tableData} />
+            </div>
+            <div style={{ display: isMobile ? "" : "none" }}>
+              <MobileFacilities tableData={tableData} />
+            </div>
           </main>
         </AppShell>
       )}
