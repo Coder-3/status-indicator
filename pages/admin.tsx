@@ -233,9 +233,7 @@ const RowActionButtons = ({
         display: "flex",
         height: "100%",
         alignItems: "center",
-        flexDirection: isMobile ? "column" : "row",
         justifyContent: isMobile ? "center" : "flex-start",
-        margin: isMobile ? 10 : 0,
         gap: isMobile ? 10 : 0,
       }}
     >
@@ -243,6 +241,7 @@ const RowActionButtons = ({
         size="xl"
         title="Edit"
         variant="filled"
+        color="blue"
         onClick={handleEdit}
         mr={isMobile ? 0 : "sm"}
       >
@@ -252,6 +251,7 @@ const RowActionButtons = ({
         size="xl"
         title="Delete"
         variant="filled"
+        color="blue"
         onClick={handleDelete}
       >
         <IconTrash size={18} />
@@ -413,18 +413,37 @@ const MobileFacility = ({ facility }: { facility: any }) => {
       <Card withBorder style={{ width: "100%" }}>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <div
-            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              width: "100%",
+            }}
           >
-            <Title order={3}>{facility.name}</Title>
-            <Text>{facility.notes}</Text>
-            <Badge
-              color={facility.status === "Open" ? "green" : "red"}
-              style={{ width: "100px" }}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                width: "100%",
+                justifyContent: "space-between",
+              }}
             >
-              {facility.status}
-            </Badge>
+              <div
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <Title order={3}>{facility.name}</Title>
+                  {facility.status}
+                </div>
+                <div>{facility.edit}</div>
+              </div>
+            </div>
+            <Text>{facility.notes}</Text>
           </div>
-          <div>{facility.edit}</div>
         </div>
       </Card>
     </>
@@ -522,7 +541,16 @@ const Admin: NextPage = () => {
         return {
           id: facility.id,
           name: facility.name,
-          status: facility.status,
+          status: (
+            <Badge
+              variant="filled"
+              color={facility.status === "Open" ? "green" : "red"}
+              style={{ width: "100px" }}
+              radius="sm"
+            >
+              {facility.status}
+            </Badge>
+          ),
           notes: facility.notes,
           edit: (
             <RowActionButtons
@@ -670,7 +698,7 @@ const Admin: NextPage = () => {
             </Modal>
             <Group position="right">
               {!isMobile ? (
-                <div style={{ display: "flex" }}>
+                <div style={{ display: "flex", gap: "10px" }}>
                   {isUnsavedChanges ? (
                     <Button onClick={() => setIsRefreshModalOpen(true)} mb="xs">
                       Refresh
@@ -722,6 +750,7 @@ const Admin: NextPage = () => {
                       <ActionIcon
                         title="Refresh"
                         variant="filled"
+                        color="blue"
                         size="xl"
                         onClick={() => setIsRefreshModalOpen(true)}
                       >
@@ -731,6 +760,7 @@ const Admin: NextPage = () => {
                       <ActionIcon
                         title="Refresh"
                         variant="filled"
+                        color="blue"
                         size="xl"
                         onClick={getFacilities}
                       >
@@ -740,6 +770,7 @@ const Admin: NextPage = () => {
                     <ActionIcon
                       title="Copy iFrame"
                       variant="filled"
+                      color="blue"
                       size="xl"
                       onClick={() => {
                         setCurrentFacility(null);
@@ -751,6 +782,7 @@ const Admin: NextPage = () => {
                     <ActionIcon
                       title="Add Facility"
                       variant="filled"
+                      color="blue"
                       size="xl"
                       onClick={() => {
                         setCurrentFacility(null);
@@ -762,6 +794,7 @@ const Admin: NextPage = () => {
                     <ActionIcon
                       title="Publish"
                       variant="filled"
+                      color="blue"
                       size="xl"
                       disabled={!isUnsavedChanges}
                       onClick={() => setIsPublishModalOpen(true)}
