@@ -19,20 +19,27 @@ import {
   Badge,
   Affix,
   Textarea,
+  Accordion,
 } from "@mantine/core";
 import { Prism } from "@mantine/prism";
 import {
   IconPencil,
   IconTrash,
   IconRefresh,
-  IconCopy,
+  IconCode,
   IconPlus,
   IconWorldUpload,
+  IconCalendar,
+  IconClock,
+  IconSearch,
 } from "@tabler/icons";
 import { supabase } from "../utils/supabaseClient";
 import { Session } from "@supabase/supabase-js";
 import { useRouter } from "next/router";
 import { useMediaQuery } from "@mantine/hooks";
+import { DatePicker, TimeInput } from "@mantine/dates";
+import { Facility } from "../types/types";
+import { isFacilityOpen } from "../utils/facilities";
 
 const useStyles = createStyles((theme) => ({
   modalButtonsContainer: {
@@ -49,25 +56,17 @@ const useStyles = createStyles((theme) => ({
   },
 }));
 
-type Facility = {
-  id: string;
-  created_at: string;
-  name: string;
-  status: string;
-  notes: string;
-  order: number | null;
-  deleted: boolean;
-};
-
 const AddEditFacilityModal = ({
   facilities,
   facility,
+  isMobile,
   setIsModalOpen,
   setFacilities,
   setIsUnsavedChanges,
 }: {
   facilities: Facility[];
   facility: Facility | null;
+  isMobile: boolean;
   setIsModalOpen: (isModalOpen: boolean) => void;
   setFacilities: (facilities: Facility[]) => void;
   setIsUnsavedChanges: (isUnsavedChanges: boolean) => void;
@@ -75,12 +74,50 @@ const AddEditFacilityModal = ({
   const { classes } = useStyles();
   const [name, setName] = useState(facility ? facility.name : "");
   const [status, setStatus] = useState<string | null>(
-    facility ? facility.status : null
+    facility ? (isFacilityOpen(facility) ? "Open" : "Closed") : null
   );
   const [notes, setNotes] = useState(facility ? facility.notes : "");
+  const [startTime, setStartTime] = useState<Date | null>(
+    facility?.closure_start_time
+      ? new Date(facility.closure_start_time)
+      : new Date(new Date().setHours(0, 0, 0, 0))
+  );
+  const [endTime, setEndTime] = useState<Date | null>(
+    facility?.closure_end_time
+      ? new Date(facility.closure_end_time)
+      : new Date(new Date().setHours(23, 59, 59, 999))
+  );
+  const [closingDay, setClosingDay] = useState<Date | null>(
+    facility?.closure_start_date ? new Date(facility.closure_start_date) : null
+  );
+  const [reOpeningDay, setReOpeningDay] = useState<Date | null>(
+    facility?.closure_end_date ? new Date(facility.closure_end_date) : null
+  );
 
   const handleSave = (e: any) => {
     e.preventDefault();
+
+    if (
+      (closingDay || reOpeningDay) &&
+      !(startTime && endTime && closingDay && reOpeningDay)
+    ) {
+      alert("Please set all fields for closure");
+      return;
+    }
+
+    if (
+      startTime &&
+      endTime &&
+      closingDay &&
+      reOpeningDay &&
+      new Date(closingDay).getTime() + startTime.getTime() >
+        new Date(reOpeningDay).getTime() + endTime.getTime()
+    ) {
+      alert(
+        "Please ensure the closure start date and time are before the closure end date and time"
+      );
+      return;
+    }
 
     const newFacility: any = {
       id: facility ? facility.id : Math.floor(Math.random() * 1000000),
@@ -90,6 +127,10 @@ const AddEditFacilityModal = ({
       notes,
       order: facility ? facility.order : null,
       deleted: false,
+      closure_start_date: closingDay ? closingDay.toISOString() : null,
+      closure_end_date: reOpeningDay ? reOpeningDay.toISOString() : null,
+      closure_start_time: startTime && endTime && closingDay && reOpeningDay ? startTime.toISOString() : null,
+      closure_end_time: endTime && startTime && closingDay && reOpeningDay ? endTime.toISOString() : null,
     };
 
     if (facility) {
@@ -111,6 +152,51 @@ const AddEditFacilityModal = ({
   return (
     <>
       <form onSubmit={handleSave} className={classes.modalForm}>
+        <Accordion
+          defaultValue={
+            facility?.closure_start_date || facility?.closure_end_date
+              ? "scheduledMaintenance"
+              : undefined
+          }
+        >
+          <Accordion.Item value="scheduledMaintenance">
+            <Accordion.Control>Scheduled Maintenance</Accordion.Control>
+            <Accordion.Panel>
+              <DatePicker
+                label="Closing day"
+                placeholder="Select closing day"
+                value={closingDay}
+                onChange={setClosingDay}
+                dropdownType={isMobile ? "modal" : "popover"}
+                icon={<IconCalendar size={16} />}
+              />
+              <TimeInput
+                label="Facility closing time"
+                format="12"
+                value={startTime}
+                onChange={setStartTime}
+                icon={<IconClock size={16} />}
+                clearable
+              />
+              <DatePicker
+                label="Re-opening day"
+                placeholder="Select re-opening day"
+                value={reOpeningDay}
+                onChange={setReOpeningDay}
+                dropdownType={isMobile ? "modal" : "popover"}
+                icon={<IconCalendar size={16} />}
+              />
+              <TimeInput
+                label="Facility re-opening time"
+                format="12"
+                value={endTime}
+                onChange={setEndTime}
+                icon={<IconClock size={16} />}
+                clearable
+              />
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
         <TextInput
           label="Name"
           placeholder="Name"
@@ -274,6 +360,7 @@ const FacilitiesTable = ({ tableData }: { tableData: any[] }) => {
       <td>{facility.name}</td>
       <td>{facility.status}</td>
       <td>{facility.notes}</td>
+      <td>{facility.scheduledMaintenance}</td>
       <td>{facility.edit}</td>
     </tr>
   ));
@@ -284,6 +371,7 @@ const FacilitiesTable = ({ tableData }: { tableData: any[] }) => {
         <tr>
           <th>
             <TextInput
+              icon={<IconSearch size={16} />}
               placeholder="Search facility name"
               value={search}
               onChange={(e: any) => setSearch(e.target.value)}
@@ -305,6 +393,7 @@ const FacilitiesTable = ({ tableData }: { tableData: any[] }) => {
             />
           </th>
           <th>Notes</th>
+          <th>Scheduled Maintenance</th>
           <th>Edit</th>
         </tr>
       </thead>
@@ -407,6 +496,19 @@ const RefreshModal = ({
   );
 };
 
+const FacilityStatus = ({ facility }: { facility: Facility }) => (
+  <>
+    <Badge
+      variant="filled"
+      color={isFacilityOpen(facility) ? "green" : "red"}
+      style={{ width: "100px" }}
+      radius="sm"
+    >
+      {isFacilityOpen(facility) ? "Open" : "Closed"}
+    </Badge>
+  </>
+);
+
 const MobileFacility = ({ facility }: { facility: any }) => {
   return (
     <>
@@ -443,6 +545,7 @@ const MobileFacility = ({ facility }: { facility: any }) => {
               </div>
             </div>
             <Text>{facility.notes}</Text>
+            <Text>{facility.scheduledMaintenance}</Text>
           </div>
         </div>
       </Card>
@@ -474,6 +577,7 @@ const MobileFacilities = ({ tableData }: { tableData: any[] }) => {
       }}
     >
       <TextInput
+        icon={<IconSearch size={16} />}
         placeholder="Search facility name"
         value={search}
         onChange={(e: any) => setSearch(e.target.value)}
@@ -526,13 +630,73 @@ const Admin: NextPage = () => {
         .select("*")
         .eq("deleted", false);
       if (data && data.length > 0) {
-        setFacilities(data);
+        setFacilities(data.sort((a, b) => a.name.localeCompare(b.name)));
       }
       if (error) throw error;
     } catch (error: any) {
       alert(error.error_description || error.message);
     }
   }, [setFacilities]);
+
+  const getOrdinalSuffix = (i: number) => {
+    const j = i % 10,
+      k = i % 100;
+    if (j == 1 && k != 11) {
+      return i + "st";
+    }
+    if (j == 2 && k != 12) {
+      return i + "nd";
+    }
+    if (j == 3 && k != 13) {
+      return i + "rd";
+    }
+    return i + "th";
+  };
+
+  const createClosureDateTimeRange = useCallback((facility: Facility) => {
+    if (
+      !facility ||
+      !facility.closure_start_date ||
+      !facility.closure_start_time ||
+      !facility.closure_end_date ||
+      !facility.closure_end_time
+    ) {
+      return "No maintenance scheduled";
+    }
+
+    const {
+      closure_start_date,
+      closure_start_time,
+      closure_end_date,
+      closure_end_time,
+    } = facility;
+
+    const startDate = new Date(closure_start_date);
+    const endDate = new Date(closure_end_date);
+    const startTime = new Date(closure_start_time);
+    const endTime = new Date(closure_end_time);
+
+    const startDateTime = `${getOrdinalSuffix(
+      startDate.getDate()
+    )} ${startDate.toLocaleString("default", {
+      month: "long",
+    })} ${startDate.getFullYear()} ${new Intl.DateTimeFormat("default", {
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+    }).format(startTime)}`;
+    const endDateTime = `${getOrdinalSuffix(
+      endDate.getDate()
+    )} ${endDate.toLocaleString("default", {
+      month: "long",
+    })} ${endDate.getFullYear()} ${new Intl.DateTimeFormat("default", {
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+    }).format(endTime)}`;
+
+    return `${startDateTime} - ${endDateTime}`;
+  }, []);
 
   const createTableData = useCallback(() => {
     const facilitiesAsTableData = facilities
@@ -541,16 +705,7 @@ const Admin: NextPage = () => {
         return {
           id: facility.id,
           name: facility.name,
-          status: (
-            <Badge
-              variant="filled"
-              color={facility.status === "Open" ? "green" : "red"}
-              style={{ width: "100px" }}
-              radius="sm"
-            >
-              {facility.status}
-            </Badge>
-          ),
+          status: <FacilityStatus facility={facility} />,
           notes: facility.notes,
           edit: (
             <RowActionButtons
@@ -561,10 +716,13 @@ const Admin: NextPage = () => {
               setCurrentFacility={setCurrentFacility}
             />
           ),
+          scheduledMaintenance: (
+            <Text>{createClosureDateTimeRange(facility)}</Text>
+          ),
         };
       });
     setTableData(facilitiesAsTableData);
-  }, [facilities, isMobile]);
+  }, [createClosureDateTimeRange, facilities, isMobile]);
 
   useEffect(() => {
     getFacilities();
@@ -647,10 +805,16 @@ const Admin: NextPage = () => {
               opened={isAddEditModalOpen}
               onClose={() => setIsAddEditModalOpen(false)}
               title={currentFacility ? "Edit Facility" : "Add Facility"}
+              styles={{
+                inner: {
+                  marginBottom: 70,
+                },
+              }}
             >
               <AddEditFacilityModal
                 facilities={facilities}
                 facility={currentFacility}
+                isMobile={isMobile}
                 setIsModalOpen={setIsAddEditModalOpen}
                 setFacilities={setFacilities}
                 setIsUnsavedChanges={setIsUnsavedChanges}
@@ -700,11 +864,19 @@ const Admin: NextPage = () => {
               {!isMobile ? (
                 <div style={{ display: "flex", gap: "10px" }}>
                   {isUnsavedChanges ? (
-                    <Button onClick={() => setIsRefreshModalOpen(true)} mb="xs">
+                    <Button
+                      onClick={() => setIsRefreshModalOpen(true)}
+                      mb="xs"
+                      leftIcon={<IconRefresh />}
+                    >
                       Refresh
                     </Button>
                   ) : (
-                    <Button onClick={getFacilities} mb="xs">
+                    <Button
+                      onClick={getFacilities}
+                      mb="xs"
+                      leftIcon={<IconRefresh />}
+                    >
                       Refresh
                     </Button>
                   )}
@@ -714,6 +886,7 @@ const Admin: NextPage = () => {
                       setIsCopyIframeModalOpen(true);
                     }}
                     mb="xs"
+                    leftIcon={<IconCode />}
                   >
                     Copy iFrame
                   </Button>
@@ -723,6 +896,7 @@ const Admin: NextPage = () => {
                       setIsAddEditModalOpen(true);
                     }}
                     mb="xs"
+                    leftIcon={<IconPlus />}
                   >
                     Add Facility
                   </Button>
@@ -730,6 +904,7 @@ const Admin: NextPage = () => {
                     disabled={!isUnsavedChanges}
                     onClick={() => setIsPublishModalOpen(true)}
                     mb="xs"
+                    leftIcon={<IconWorldUpload />}
                   >
                     Publish
                   </Button>
@@ -777,7 +952,7 @@ const Admin: NextPage = () => {
                         setIsCopyIframeModalOpen(true);
                       }}
                     >
-                      <IconCopy />
+                      <IconCode />
                     </ActionIcon>
                     <ActionIcon
                       title="Add Facility"
