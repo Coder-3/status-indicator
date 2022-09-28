@@ -129,8 +129,14 @@ const AddEditFacilityModal = ({
       deleted: false,
       closure_start_date: closingDay ? closingDay.toISOString() : null,
       closure_end_date: reOpeningDay ? reOpeningDay.toISOString() : null,
-      closure_start_time: startTime && endTime && closingDay && reOpeningDay ? startTime.toISOString() : null,
-      closure_end_time: endTime && startTime && closingDay && reOpeningDay ? endTime.toISOString() : null,
+      closure_start_time:
+        startTime && endTime && closingDay && reOpeningDay
+          ? startTime.toISOString()
+          : null,
+      closure_end_time:
+        endTime && startTime && closingDay && reOpeningDay
+          ? endTime.toISOString()
+          : null,
     };
 
     if (facility) {
@@ -347,11 +353,19 @@ const RowActionButtons = ({
 };
 
 const FacilitiesTable = ({ tableData }: { tableData: any[] }) => {
-  const [status, setStatus] = useState<any[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const filteredTableData = tableData.filter((item) => {
     const searchMatch = item.name.toLowerCase().includes(search.toLowerCase());
-    const statusMatch = status.length ? status.includes(item.status) : true;
+    let statusMatch = true;
+    if (status === "Open" && !isFacilityOpen(item.status.props.facility)) {
+      statusMatch = false;
+    } else if (
+      status === "Closed" &&
+      isFacilityOpen(item.status.props.facility)
+    ) {
+      statusMatch = false;
+    }
     return searchMatch && statusMatch;
   });
 
@@ -379,11 +393,8 @@ const FacilitiesTable = ({ tableData }: { tableData: any[] }) => {
             />
           </th>
           <th>
-            <MultiSelect
-              data={[
-                { value: "Open", label: "Open" },
-                { value: "Closed", label: "Closed" },
-              ]}
+            <Select
+              data={["Open", "Closed"]}
               placeholder="Status"
               searchable
               clearable
@@ -554,11 +565,17 @@ const MobileFacility = ({ facility }: { facility: any }) => {
 };
 
 const MobileFacilities = ({ tableData }: { tableData: any[] }) => {
-  const [status, setStatus] = useState<any[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const filteredTableData = tableData.filter((item) => {
     const searchMatch = item.name.toLowerCase().includes(search.toLowerCase());
-    const statusMatch = status.length ? status.includes(item.status) : true;
+    let statusMatch = true;
+    if (status === "Open" && !isFacilityOpen(item.status.props.facility)) {
+      statusMatch = false;
+    }
+    if (status === "Closed" && isFacilityOpen(item.status.props.facility)) {
+      statusMatch = false;
+    }
     return searchMatch && statusMatch;
   });
 
@@ -584,11 +601,8 @@ const MobileFacilities = ({ tableData }: { tableData: any[] }) => {
         style={{ width: "100%" }}
         size="lg"
       />
-      <MultiSelect
-        data={[
-          { value: "Open", label: "Open" },
-          { value: "Closed", label: "Closed" },
-        ]}
+      <Select
+        data={["Open", "Closed"]}
         placeholder="Status"
         searchable
         clearable
