@@ -796,10 +796,8 @@ const Admin: NextPage = () => {
         .from("facilities")
         .upsert(facilities);
       if (error) throw error;
-      if (data) {
-        setIsPublishModalOpen(false);
-        setIsUnsavedChanges(false);
-      }
+      setIsPublishModalOpen(false);
+      setIsUnsavedChanges(false);
     } catch (error: any) {
       alert(error.error_description || error.message);
     }
