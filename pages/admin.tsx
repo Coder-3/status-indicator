@@ -9,7 +9,6 @@ import {
   Group,
   TextInput,
   Select,
-  MultiSelect,
   ActionIcon,
   Text,
   Title,
@@ -32,6 +31,7 @@ import {
   IconCalendar,
   IconClock,
   IconSearch,
+  IconSettings,
 } from "@tabler/icons";
 import { supabase } from "../utils/supabaseClient";
 import { Session } from "@supabase/supabase-js";
@@ -40,6 +40,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { DatePicker, TimeInput } from "@mantine/dates";
 import { Facility } from "../types/types";
 import { isFacilityOpen } from "../utils/facilities";
+import TeamMembers from "../components/TeamMembers";
 
 const useStyles = createStyles((theme) => ({
   modalButtonsContainer: {
@@ -604,7 +605,6 @@ const MobileFacilities = ({ tableData }: { tableData: any[] }) => {
       <Select
         data={["Open", "Closed"]}
         placeholder="Status"
-        searchable
         clearable
         value={status}
         onChange={setStatus}
@@ -628,14 +628,34 @@ const Admin: NextPage = () => {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [isUnsavedChanges, setIsUnsavedChanges] = useState(false);
+  const [isTeamMembersModalOpen, setIsTeamMembersModalOpen] = useState(false);
+  const [userRole, setUserRole] = useState("");
   const isMobile = useMediaQuery("(max-width: 768px)");
 
-  useEffect(() => {
-    const s = supabase.auth.session();
-    if (!s) {
-      router.push("/login");
+  const getUserRole = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user && user.id) {
+        const { data, error } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", user.id);
+        if (error) throw error;
+        if (data && data[0] && data[0].role) {
+          setUserRole(data[0].role);
+        }
+      }
+    } catch (error) {
+      console.log("error", error);
     }
-  });
+  }, []);
+
+  useEffect(() => {
+    getUserRole();
+  }, [getUserRole]);
 
   const getFacilities = useCallback(async () => {
     try {
@@ -746,13 +766,23 @@ const Admin: NextPage = () => {
     createTableData();
   }, [facilities, createTableData]);
 
-  useEffect(() => {
-    setSession(supabase.auth.session());
+  const handleSession = useCallback(async () => {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    if (data && data.session) {
+      setSession(data.session);
+    } else {
+      setSession(null);
+      router.push("/login");
+    }
+  }, [router]);
 
+  useEffect(() => {
+    handleSession();
     supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
-  }, []);
+  }, [handleSession]);
 
   const handleSignout = async () => {
     await supabase.auth.signOut();
@@ -794,10 +824,20 @@ const Admin: NextPage = () => {
                   Status Indicator
                 </Title>
               </div>
-              <div>
+              <div style={{ display: "flex", alignItems: "center" }}>
                 <Button onClick={handleSignout} color="gray" variant="outline">
                   Sign Out
                 </Button>
+                {userRole === "admin" && (
+                  <ActionIcon
+                    onClick={() => setIsTeamMembersModalOpen(true)}
+                    variant="outline"
+                    size="lg"
+                    ml="md"
+                  >
+                    <IconSettings />
+                  </ActionIcon>
+                )}
               </div>
             </Header>
           }
@@ -815,6 +855,13 @@ const Admin: NextPage = () => {
           </Head>
 
           <main>
+            <Modal
+              opened={isTeamMembersModalOpen}
+              onClose={() => setIsTeamMembersModalOpen(false)}
+              fullScreen
+            >
+              <TeamMembers />
+            </Modal>
             <Modal
               opened={isAddEditModalOpen}
               onClose={() => setIsAddEditModalOpen(false)}

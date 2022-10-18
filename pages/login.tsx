@@ -11,42 +11,40 @@ import {
   PasswordInput,
   Stack,
   Container,
-  Center,
 } from "@mantine/core";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
-import { Session } from "@supabase/supabase-js";
 
 const LoginPage: NextPage = () => {
-  const [session, setSession] = useState<Session>();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
+  const [teamMemberEmail, setTeamMemberEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [operationType, setOperationType] = useState("login");
+  const [operationType, setOperationType] = useState("signup");
 
   const router = useRouter();
-
-  useEffect(() => {
-    const s = supabase.auth.session();
-    if (s) {
-      router.push("/admin");
-      setSession(s);
-    }
-
-    supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setSession(session);
-      }
-    });
-  }, [router]);
 
   const handleLogin = async (e: any) => {
     e.preventDefault();
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signIn({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
       if (error) throw error;
-      router.push("/admin");
+      if (data && data.user && data.user.id) {
+        const { data: data2, error: error2 } = await supabase
+          .from("users")
+          .select("organisation")
+          .eq("id", data.user.id);
+        if (error2) throw error2;
+        if (data2 && data2[0] && data2[0].organisation) {
+          router.push("/admin");
+        } else {
+          router.push("/createOrganisation");
+        }
+      }
     } catch (error: any) {
       alert(error.error_description || error.message);
     } finally {
@@ -58,18 +56,40 @@ const LoginPage: NextPage = () => {
     e.preventDefault();
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
       });
       if (error) throw error;
-      alert(
-        "Please check your inbox and click on the link to confirm your email"
-      );
+      if (data && data.user && data.user.id) {
+        const { error: error2 } = await supabase
+          .from("users")
+          .update({
+            email,
+          })
+          .eq("id", data.user.id);
+        if (error2) throw error2;
+        router.push("/createOrganisation");
+      }
     } catch (error: any) {
       alert(error.error_description || error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTeamMemberLogin = async (e: any) => {
+    e.preventDefault();
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithOtp({
+        email: teamMemberEmail,
+      });
+      if (error) throw error;
+      router.push("/admin");
+    } catch (error: any) {
+      alert(error.error_description || error.message);
     }
   };
 
@@ -86,13 +106,28 @@ const LoginPage: NextPage = () => {
           value={operationType}
           onChange={setOperationType}
           data={[
-            { label: "Login", value: "login" },
-            { label: "Signup", value: "signup" },
+            { label: "Team Member Login", value: "tLogin" },
+            { label: "Admin Login", value: "aLogin" },
+            { label: "Admin Signup", value: "signup" },
           ]}
         />
         {loading ? (
           <Loader />
-        ) : operationType === "login" ? (
+        ) : operationType === "tLogin" ? (
+          <form style={{ width: "100%" }} onSubmit={handleTeamMemberLogin}>
+            <Input
+              id="email"
+              type="email"
+              placeholder="Your email"
+              value={teamMemberEmail}
+              required
+              onChange={(e: any) => setTeamMemberEmail(e.currentTarget.value)}
+            />
+            <Button mt="sm" type="submit" style={{ width: "100%" }}>
+              Login
+            </Button>
+          </form>
+        ) : operationType === "aLogin" ? (
           <form style={{ width: "100%" }} onSubmit={handleLogin}>
             <Input
               id="email"
