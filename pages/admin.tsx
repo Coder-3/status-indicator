@@ -95,7 +95,7 @@ const AddEditFacilityModal = ({
     facility?.closure_end_date ? new Date(facility.closure_end_date) : null
   );
 
-  const handleSave = (e: any) => {
+  const handleSave = async (e: any) => {
     e.preventDefault();
 
     if (
@@ -120,36 +120,56 @@ const AddEditFacilityModal = ({
       return;
     }
 
-    const newFacility: any = {
-      id: facility ? facility.id : Math.floor(Math.random() * 1000000),
-      created_at: facility ? facility.created_at : new Date().toISOString(),
-      name,
-      status,
-      notes,
-      order: facility ? facility.order : null,
-      deleted: false,
-      closure_start_date: closingDay ? closingDay.toISOString() : null,
-      closure_end_date: reOpeningDay ? reOpeningDay.toISOString() : null,
-      closure_start_time:
-        startTime && endTime && closingDay && reOpeningDay
-          ? startTime.toISOString()
-          : null,
-      closure_end_time:
-        endTime && startTime && closingDay && reOpeningDay
-          ? endTime.toISOString()
-          : null,
-    };
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user && user.id) {
+        const { data, error } = await supabase
+          .from("users")
+          .select("organisation")
+          .eq("id", user.id);
+        if (error) throw error;
 
-    if (facility) {
-      const newFacilities = facilities.map((facility) => {
-        if (facility.id === newFacility.id) {
-          return newFacility;
+        if (data && data[0] && data[0].organisation) {
+          const newFacility: any = {
+            id: facility ? facility.id : Math.floor(Math.random() * 1000000),
+            organisation: data[0].organisation,
+            created_at: facility
+              ? facility.created_at
+              : new Date().toISOString(),
+            name,
+            status,
+            notes,
+            order: facility ? facility.order : null,
+            deleted: false,
+            closure_start_date: closingDay ? closingDay.toISOString() : null,
+            closure_end_date: reOpeningDay ? reOpeningDay.toISOString() : null,
+            closure_start_time:
+              startTime && endTime && closingDay && reOpeningDay
+                ? startTime.toISOString()
+                : null,
+            closure_end_time:
+              endTime && startTime && closingDay && reOpeningDay
+                ? endTime.toISOString()
+                : null,
+          };
+
+          if (facility) {
+            const newFacilities = facilities.map((facility) => {
+              if (facility.id === newFacility.id) {
+                return newFacility;
+              }
+              return facility;
+            });
+            setFacilities(newFacilities);
+          } else {
+            setFacilities([...facilities, newFacility]);
+          }
         }
-        return facility;
-      });
-      setFacilities(newFacilities);
-    } else {
-      setFacilities([...facilities, newFacility]);
+      }
+    } catch (error) {
+      console.log("error", error);
     }
 
     setIsModalOpen(false);
@@ -415,22 +435,44 @@ const FacilitiesTable = ({ tableData }: { tableData: any[] }) => {
 };
 
 const CopyIFrameModal = () => {
+  const [organisationId, setOrganisationId] = useState("");
+
+  const getOrganisationId = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user && user.id) {
+        const { data, error } = await supabase
+          .from("users")
+          .select("organisation")
+          .eq("id", user.id);
+        if (error) throw error;
+        if (data && data[0] && data[0].organisation) {
+          setOrganisationId(data[0].organisation);
+        }
+      }
+    } catch (error) {
+      console.log("error", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    getOrganisationId();
+  }, [getOrganisationId]);
+
   const url = window.location.href.substring(
     0,
     window.location.href.length - 6
   );
   const iFrameString = `
-  <iframe
-  src=${url}
-  width="100%"
-  height="100%"
-></iframe>
+  <iframe src="${url}/organisations/${organisationId}" width="100%" height="100%"></iframe>
   `;
 
   return (
-    <>
+    <div style={{ maxWidth: "80vw" }}>
       <Prism language="markup">{iFrameString}</Prism>
-    </>
+    </div>
   );
 };
 
@@ -659,18 +701,30 @@ const Admin: NextPage = () => {
 
   const getFacilities = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("facilities")
-        .select("*")
-        .eq("deleted", false);
-      if (data && data.length > 0) {
-        setFacilities(data.sort((a, b) => a.name.localeCompare(b.name)));
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user && user.id) {
+        const { data, error } = await supabase
+          .from("users")
+          .select("organisation")
+          .eq("id", user.id);
+        if (error) throw error;
+        if (data && data[0] && data[0].organisation) {
+          const { data: data2, error: error2 } = await supabase
+            .from("facilities")
+            .select("*")
+            .match({ organisation: data[0].organisation, deleted: false });
+          if (error2) throw error2;
+          if (data2 && data2.length > 0) {
+            setFacilities(data2.sort((a, b) => a.name.localeCompare(b.name)));
+          }
+        }
       }
-      if (error) throw error;
-    } catch (error: any) {
-      alert(error.error_description || error.message);
+    } catch (error) {
+      console.log("error", error);
     }
-  }, [setFacilities]);
+  }, []);
 
   const getOrdinalSuffix = (i: number) => {
     const j = i % 10,
@@ -792,9 +846,7 @@ const Admin: NextPage = () => {
 
   const handlePublish = async () => {
     try {
-      const { data, error } = await supabase
-        .from("facilities")
-        .upsert(facilities);
+      const { error } = await supabase.from("facilities").upsert(facilities);
       if (error) throw error;
       setIsPublishModalOpen(false);
       setIsUnsavedChanges(false);

@@ -1,5 +1,6 @@
 export type Facility = {
   id: string;
+  organisation: number | null;
   created_at: string;
   name: string;
   status: string;
