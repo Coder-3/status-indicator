@@ -856,6 +856,7 @@ const Admin: NextPage = () => {
 
           <main>
             <Modal
+              title="Team Members"
               opened={isTeamMembersModalOpen}
               onClose={() => setIsTeamMembersModalOpen(false)}
               fullScreen

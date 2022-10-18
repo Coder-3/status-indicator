@@ -60,8 +60,8 @@ const MobileTeamMembers = ({
         value={operationType}
         onChange={setOperationType}
         data={[
-          { label: "Manage Team Member", value: "invite" },
-          { label: "Manage Team Members", value: "manage" },
+          { label: "Add", value: "invite" },
+          { label: "Manage", value: "manage" },
         ]}
       />
       {operationType === "invite" ? (

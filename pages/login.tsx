@@ -14,6 +14,7 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { useRouter } from "next/router";
+import { useMediaQuery } from "@mantine/hooks";
 
 const LoginPage: NextPage = () => {
   const [loading, setLoading] = useState(false);
@@ -21,6 +22,7 @@ const LoginPage: NextPage = () => {
   const [teamMemberEmail, setTeamMemberEmail] = useState("");
   const [password, setPassword] = useState("");
   const [operationType, setOperationType] = useState("signup");
+  const isSmallScreen = useMediaQuery("(max-width: 500px)");
 
   const router = useRouter();
 
@@ -105,6 +107,7 @@ const LoginPage: NextPage = () => {
         <SegmentedControl
           value={operationType}
           onChange={setOperationType}
+          orientation={isSmallScreen ? "vertical" : "horizontal"}
           data={[
             { label: "Team Member Login", value: "tLogin" },
             { label: "Admin Login", value: "aLogin" },
