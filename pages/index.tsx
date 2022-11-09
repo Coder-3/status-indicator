@@ -1,16 +1,44 @@
-import type { NextPage } from "next";
-import Head from "next/head";
+import {
+  createBrowserSupabaseClient,
+  User,
+  withPageAuth,
+} from "@supabase/auth-helpers-nextjs";
+import { GetServerSideProps } from "next";
+import { useRouter } from "next/router";
+import { useState } from "react";
 
-const Home: NextPage = () => (
-  <>
-    <Head>
-      <title>Status Indicator</title>
-      <meta name="description" content="Status Indicator" />
-      <link rel="icon" href="/favicon.ico" />
-    </Head>
+interface Props {
+  user: User;
+}
 
-    <main></main>
-  </>
-);
+export const getServerSideProps: GetServerSideProps<Props> = withPageAuth({
+  redirectTo: "/admin",
+  async getServerSideProps(ctx, supabase) {
+    const {
+      data: { user: user },
+    } = await supabase.auth.getUser();
+    console.log("this is the index user", user);
+    return { props: { user } };
+  },
+});
 
-export default Home;
+export default function HomePage({ user }: Props) {
+  const router = useRouter();
+  const [supabaseClient] = useState(() => createBrowserSupabaseClient());
+
+  return (
+    <main>
+      <section>
+        <div> Signed in as: {user?.email}</div>
+        <button
+          onClick={async () => {
+            await supabaseClient.auth.signOut();
+            router.push("/sign-in");
+          }}
+        >
+          Logout
+        </button>
+      </section>
+    </main>
+  );
+}

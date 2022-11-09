@@ -11,9 +11,8 @@ import {
   Modal,
   SegmentedControl,
 } from "@mantine/core";
-import { supabase } from "../utils/supabaseClient";
-import { useRouter } from "next/router";
 import { useMediaQuery } from "@mantine/hooks";
+import { createBrowserSupabaseClient } from "@supabase/auth-helpers-nextjs";
 
 const useStyles = createStyles((theme) => ({
   modalButtonsContainer: {
@@ -133,6 +132,8 @@ const MobileTeamMembers = ({
 };
 
 const TeamMembers = () => {
+  const [supabase] = useState(() => createBrowserSupabaseClient());
+
   const { classes } = useStyles();
 
   const [email, setEmail] = useState<string>("");
@@ -141,7 +142,9 @@ const TeamMembers = () => {
   const [currentTeamMember, setCurrentTeamMember] = useState<TeamMember | null>(
     null
   );
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isMobile = useMediaQuery("(max-width: 768px)", true, {
+    getInitialValueInEffect: false,
+  });
 
   const handleGetTeamMembers = async () => {
     try {
@@ -198,43 +201,28 @@ const TeamMembers = () => {
 
   const handleInviteTeamMembers = async (e: any) => {
     e.preventDefault();
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user && user.id) {
-        const { data, error } = await supabase
-          .from("users")
-          .select("organisation")
-          .eq("id", user.id);
-        if (error) throw error;
+    const url =
+      process.env.NEXT_PUBLIC_ENV === "local"
+        ? "http://localhost:3000/api/inviteTeamMember"
+        : "https://status-indicator.vercel.app/api/inviteTeamMember";
 
-        if (data && data[0] && data[0]["organisation"]) {
-          const { data: data2, error: error2 } = await supabase.auth.signUp({
-            email,
-            password: Math.random().toString(36).slice(-16),
-          });
-          if (error2) throw error2;
-          if (data2 && data2.user && data2.user.id) {
-            const { data: data3, error: error3 } = await supabase
-              .from("users")
-              .update({
-                email,
-                role: "team_member",
-                organisation: data[0]["organisation"],
-              })
-              .eq("id", data2.user.id);
-            if (error3) throw error3;
-            const { error: error4 } = await supabase.auth.signInWithOtp({
-              email,
-            });
-            if (error4) throw error4;
-          }
-        }
+    try {
+      const response = await window.fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+        }),
+      });
+      if (response.status === 200) {
+        handleGetTeamMembers();
+        setEmail("");
       }
-      handleGetTeamMembers();
-    } catch (error: any) {
-      alert(error.error_description || error.message);
+      console.log("this is the response", response);
+    } catch (error) {
+      console.log(error);
     }
   };
 

@@ -1,30 +1,36 @@
+import React, { useState } from "react";
+import { useRouter } from "next/router";
+import {
+  createBrowserSupabaseClient,
+  Session,
+} from "@supabase/auth-helpers-nextjs";
+import { SessionContextProvider } from "@supabase/auth-helpers-react";
 import { AppProps } from "next/app";
-import Head from "next/head";
-import { MantineProvider } from "@mantine/core";
 
-export default function App(props: AppProps) {
-  const { Component, pageProps } = props;
+function MyApp({
+  Component,
+  pageProps,
+}: AppProps<{ initialSession: Session }>) {
+  const router = useRouter();
+  const [supabase] = useState(() => createBrowserSupabaseClient());
 
   return (
-    <>
-      <Head>
-        <title>Page title</title>
-        <meta
-          name="viewport"
-          content="minimum-scale=1, initial-scale=1, width=device-width"
-        />
-      </Head>
-
-      <MantineProvider
-        withGlobalStyles
-        withNormalizeCSS
-        theme={{
-          fontFamily: 'Poppins, sans-serif',
-          colorScheme: "light",
+    <SessionContextProvider
+      supabaseClient={supabase}
+      initialSession={pageProps.initialSession}
+    >
+      <button
+        onClick={async () => {
+          await supabase.auth.signOut();
+          router.push("/");
         }}
       >
-        <Component {...pageProps} />
-      </MantineProvider>
-    </>
+        Logout
+      </button>
+
+      <Component {...pageProps} />
+    </SessionContextProvider>
   );
 }
+
+export default MyApp;

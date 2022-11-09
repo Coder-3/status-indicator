@@ -22,7 +22,9 @@ const LoginPage: NextPage = () => {
   const [teamMemberEmail, setTeamMemberEmail] = useState("");
   const [password, setPassword] = useState("");
   const [operationType, setOperationType] = useState("signup");
-  const isSmallScreen = useMediaQuery("(max-width: 500px)");
+  const isSmallScreen = useMediaQuery("(max-width: 500px)", true, {
+    getInitialValueInEffect: false,
+  });
 
   const router = useRouter();
 
@@ -34,14 +36,17 @@ const LoginPage: NextPage = () => {
         email,
         password,
       });
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (error) throw error;
-      if (data && data.user && data.user.id) {
-        const { data: data2, error: error2 } = await supabase
+      if (user && user.id) {
+        const { data, error: error2 } = await supabase
           .from("users")
           .select("organisation")
-          .eq("id", data.user.id);
+          .eq("id", user.id);
         if (error2) throw error2;
-        if (data2 && data2[0] && data2[0].organisation) {
+        if (data && data[0] && data[0].organisation) {
           router.push("/admin");
         } else {
           router.push("/createOrganisation");
@@ -62,14 +67,17 @@ const LoginPage: NextPage = () => {
         email,
         password,
       });
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (error) throw error;
-      if (data && data.user && data.user.id) {
+      if (user && user.id) {
         const { error: error2 } = await supabase
           .from("users")
           .update({
             email,
           })
-          .eq("id", data.user.id);
+          .eq("id", user.id);
         if (error2) throw error2;
         router.push("/createOrganisation");
       }

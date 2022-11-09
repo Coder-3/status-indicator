@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import type { NextPage } from "next";
+import type {
+  GetServerSidePropsContext,
+  NextApiRequest,
+  NextApiResponse,
+  NextPage,
+  PreviewData,
+} from "next";
 import Head from "next/head";
 import {
   createStyles,
@@ -17,8 +23,6 @@ import {
   Card,
   Badge,
   Affix,
-  Textarea,
-  Accordion,
 } from "@mantine/core";
 import { Prism } from "@mantine/prism";
 import {
@@ -28,235 +32,67 @@ import {
   IconCode,
   IconPlus,
   IconWorldUpload,
-  IconCalendar,
-  IconClock,
   IconSearch,
   IconSettings,
 } from "@tabler/icons";
-import { supabase } from "../utils/supabaseClient";
-import { Session } from "@supabase/supabase-js";
 import { useRouter } from "next/router";
 import { useMediaQuery } from "@mantine/hooks";
-import { DatePicker, TimeInput } from "@mantine/dates";
 import { Facility } from "../types/types";
 import { isFacilityOpen } from "../utils/facilities";
 import TeamMembers from "../components/TeamMembers";
+import MobileFacilities from "../components/MobileFacilities";
+import RefreshModal from "../components/RefreshModal";
+import AddEditFacilityModal from "../components/AddEditFacilitiesModal";
+import {
+  createBrowserSupabaseClient,
+  createServerSupabaseClient,
+  User,
+} from "@supabase/auth-helpers-nextjs";
+import { ParsedUrlQuery } from "querystring";
+
+interface Props {
+  user: User;
+}
+
+export const getServerSideProps = async (
+  ctx:
+    | GetServerSidePropsContext<ParsedUrlQuery, PreviewData>
+    | { req: NextApiRequest; res: NextApiResponse<any> }
+) => {
+  const supabase = createServerSupabaseClient(ctx);
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session)
+    return {
+      redirect: {
+        destination: "/sign-in",
+        permanent: false,
+      },
+    };
+
+  return {
+    props: {
+      initialSession: session,
+      user: session.user,
+    },
+  };
+};
 
 const useStyles = createStyles((theme) => ({
+  modalForm: {
+    display: "flex",
+    flexDirection: "column",
+    gap: theme.spacing.xs,
+  },
   modalButtonsContainer: {
     display: "flex",
     width: "100%",
     justifyContent: "center",
     gap: theme.spacing.xl,
   },
-
-  modalForm: {
-    display: "flex",
-    flexDirection: "column",
-    gap: theme.spacing.xs,
-  },
 }));
-
-const AddEditFacilityModal = ({
-  facilities,
-  facility,
-  isMobile,
-  setIsModalOpen,
-  setFacilities,
-  setIsUnsavedChanges,
-}: {
-  facilities: Facility[];
-  facility: Facility | null;
-  isMobile: boolean;
-  setIsModalOpen: (isModalOpen: boolean) => void;
-  setFacilities: (facilities: Facility[]) => void;
-  setIsUnsavedChanges: (isUnsavedChanges: boolean) => void;
-}) => {
-  const { classes } = useStyles();
-  const [name, setName] = useState(facility ? facility.name : "");
-  const [status, setStatus] = useState<string | null>(
-    facility ? (isFacilityOpen(facility) ? "Open" : "Closed") : null
-  );
-  const [notes, setNotes] = useState(facility ? facility.notes : "");
-  const [startTime, setStartTime] = useState<Date | null>(
-    facility?.closure_start_time
-      ? new Date(facility.closure_start_time)
-      : new Date(new Date().setHours(0, 0, 0, 0))
-  );
-  const [endTime, setEndTime] = useState<Date | null>(
-    facility?.closure_end_time
-      ? new Date(facility.closure_end_time)
-      : new Date(new Date().setHours(23, 59, 59, 999))
-  );
-  const [closingDay, setClosingDay] = useState<Date | null>(
-    facility?.closure_start_date ? new Date(facility.closure_start_date) : null
-  );
-  const [reOpeningDay, setReOpeningDay] = useState<Date | null>(
-    facility?.closure_end_date ? new Date(facility.closure_end_date) : null
-  );
-
-  const handleSave = async (e: any) => {
-    e.preventDefault();
-
-    if (
-      (closingDay || reOpeningDay) &&
-      !(startTime && endTime && closingDay && reOpeningDay)
-    ) {
-      alert("Please set all fields for closure");
-      return;
-    }
-
-    if (
-      startTime &&
-      endTime &&
-      closingDay &&
-      reOpeningDay &&
-      new Date(closingDay).getTime() + startTime.getTime() >
-        new Date(reOpeningDay).getTime() + endTime.getTime()
-    ) {
-      alert(
-        "Please ensure the closure start date and time are before the closure end date and time"
-      );
-      return;
-    }
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user && user.id) {
-        const { data, error } = await supabase
-          .from("users")
-          .select("organisation")
-          .eq("id", user.id);
-        if (error) throw error;
-
-        if (data && data[0] && data[0].organisation) {
-          const newFacility: any = {
-            id: facility ? facility.id : Math.floor(Math.random() * 1000000),
-            organisation: data[0].organisation,
-            created_at: facility
-              ? facility.created_at
-              : new Date().toISOString(),
-            name,
-            status,
-            notes,
-            order: facility ? facility.order : null,
-            deleted: false,
-            closure_start_date: closingDay ? closingDay.toISOString() : null,
-            closure_end_date: reOpeningDay ? reOpeningDay.toISOString() : null,
-            closure_start_time:
-              startTime && endTime && closingDay && reOpeningDay
-                ? startTime.toISOString()
-                : null,
-            closure_end_time:
-              endTime && startTime && closingDay && reOpeningDay
-                ? endTime.toISOString()
-                : null,
-          };
-
-          if (facility) {
-            const newFacilities = facilities.map((facility) => {
-              if (facility.id === newFacility.id) {
-                return newFacility;
-              }
-              return facility;
-            });
-            setFacilities(newFacilities);
-          } else {
-            setFacilities([...facilities, newFacility]);
-          }
-        }
-      }
-    } catch (error) {
-      console.log("error", error);
-    }
-
-    setIsModalOpen(false);
-    setIsUnsavedChanges(true);
-  };
-
-  return (
-    <>
-      <form onSubmit={handleSave} className={classes.modalForm}>
-        <Accordion
-          defaultValue={
-            facility?.closure_start_date || facility?.closure_end_date
-              ? "scheduledMaintenance"
-              : undefined
-          }
-        >
-          <Accordion.Item value="scheduledMaintenance">
-            <Accordion.Control>Scheduled Maintenance</Accordion.Control>
-            <Accordion.Panel>
-              <DatePicker
-                label="Closing day"
-                placeholder="Select closing day"
-                value={closingDay}
-                onChange={setClosingDay}
-                dropdownType={isMobile ? "modal" : "popover"}
-                icon={<IconCalendar size={16} />}
-              />
-              <TimeInput
-                label="Facility closing time"
-                format="12"
-                value={startTime}
-                onChange={setStartTime}
-                icon={<IconClock size={16} />}
-                clearable
-              />
-              <DatePicker
-                label="Re-opening day"
-                placeholder="Select re-opening day"
-                value={reOpeningDay}
-                onChange={setReOpeningDay}
-                dropdownType={isMobile ? "modal" : "popover"}
-                icon={<IconCalendar size={16} />}
-              />
-              <TimeInput
-                label="Facility re-opening time"
-                format="12"
-                value={endTime}
-                onChange={setEndTime}
-                icon={<IconClock size={16} />}
-                clearable
-              />
-            </Accordion.Panel>
-          </Accordion.Item>
-        </Accordion>
-        <TextInput
-          label="Name"
-          placeholder="Name"
-          value={name}
-          onChange={(event) => setName(event.currentTarget.value)}
-          required
-        />
-        <Select
-          data={["Open", "Closed"]}
-          label="Status"
-          placeholder="Status"
-          searchable
-          clearable
-          value={status}
-          onChange={setStatus}
-          required
-        />
-        <Textarea
-          label="Notes"
-          placeholder="Notes"
-          value={notes}
-          onChange={(event) => setNotes(event.currentTarget.value)}
-          minRows={8}
-        />
-        <Group position="center" mt="lg">
-          <Button type="submit" fullWidth>
-            Save
-          </Button>
-        </Group>
-      </form>
-    </>
-  );
-};
 
 const DeleteFacilityModal = ({
   facilities,
@@ -435,6 +271,7 @@ const FacilitiesTable = ({ tableData }: { tableData: any[] }) => {
 };
 
 const CopyIFrameModal = () => {
+  const [supabase] = useState(() => createBrowserSupabaseClient());
   const [organisationId, setOrganisationId] = useState("");
 
   const getOrganisationId = useCallback(async () => {
@@ -455,7 +292,7 @@ const CopyIFrameModal = () => {
     } catch (error) {
       console.log("error", error);
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     getOrganisationId();
@@ -510,46 +347,6 @@ const PublishModal = ({
   );
 };
 
-const RefreshModal = ({
-  setIsModalOpen,
-  getFacilities,
-}: {
-  setIsModalOpen: (isModalOpen: boolean) => void;
-  getFacilities: () => void;
-}) => {
-  const { classes } = useStyles();
-
-  return (
-    <>
-      <Text>
-        Are you sure you want to refresh this page? Any unplished changes will
-        be lost
-      </Text>
-      <div className={classes.modalButtonsContainer}>
-        <Button
-          onClick={() => setIsModalOpen(false)}
-          color="gray"
-          variant="outline"
-          style={{ marginTop: 16 }}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={() => {
-            setIsModalOpen(false);
-            getFacilities();
-          }}
-          color="green"
-          variant="outline"
-          style={{ marginTop: 16 }}
-        >
-          Refresh
-        </Button>
-      </div>
-    </>
-  );
-};
-
 const FacilityStatus = ({ facility }: { facility: Facility }) => (
   <>
     <Badge
@@ -563,123 +360,27 @@ const FacilityStatus = ({ facility }: { facility: Facility }) => (
   </>
 );
 
-const MobileFacility = ({ facility }: { facility: any }) => {
-  return (
-    <>
-      <Card withBorder style={{ width: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-              width: "100%",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                width: "100%",
-                justifyContent: "space-between",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  width: "100%",
-                  justifyContent: "space-between",
-                }}
-              >
-                <div>
-                  <Title order={3}>{facility.name}</Title>
-                  {facility.status}
-                </div>
-                <div>{facility.edit}</div>
-              </div>
-            </div>
-            <Text>{facility.notes}</Text>
-            <Text>{facility.scheduledMaintenance}</Text>
-          </div>
-        </div>
-      </Card>
-    </>
-  );
-};
-
-const MobileFacilities = ({ tableData }: { tableData: any[] }) => {
-  const [status, setStatus] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const filteredTableData = tableData.filter((item) => {
-    const searchMatch = item.name.toLowerCase().includes(search.toLowerCase());
-    let statusMatch = true;
-    if (status === "Open" && !isFacilityOpen(item.status.props.facility)) {
-      statusMatch = false;
-    }
-    if (status === "Closed" && isFacilityOpen(item.status.props.facility)) {
-      statusMatch = false;
-    }
-    return searchMatch && statusMatch;
-  });
-
-  const rows = filteredTableData.map((facility) => (
-    <MobileFacility key={facility.id} facility={facility} />
-  ));
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-        alignItems: "center",
-        paddingBottom: 80,
-      }}
-    >
-      <TextInput
-        icon={<IconSearch size={16} />}
-        placeholder="Search facility name"
-        value={search}
-        onChange={(e: any) => setSearch(e.target.value)}
-        style={{ width: "100%" }}
-        size="lg"
-      />
-      <Select
-        data={["Open", "Closed"]}
-        placeholder="Status"
-        clearable
-        value={status}
-        onChange={setStatus}
-        style={{ width: "100%" }}
-        size="lg"
-      />
-      {rows}
-    </div>
-  );
-};
-
-const Admin: NextPage = () => {
+const Admin: NextPage = ({ initialSession, user }: any) => {
   const router = useRouter();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [currentFacility, setCurrentFacility] = useState<Facility | null>(null);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [tableData, setTableData] = useState<any[]>([]);
-  const [session, setSession] = useState<Session | null>(null);
   const [isCopyIFrameModalOpen, setIsCopyIframeModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [isUnsavedChanges, setIsUnsavedChanges] = useState(false);
   const [isTeamMembersModalOpen, setIsTeamMembersModalOpen] = useState(false);
   const [userRole, setUserRole] = useState("");
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isMobile = useMediaQuery("(max-width: 768px)", true, {
+    getInitialValueInEffect: false,
+  });
+
+  const [supabase] = useState(() => createBrowserSupabaseClient());
 
   const getUserRole = useCallback(async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       if (user && user.id) {
         const { data, error } = await supabase
           .from("users")
@@ -693,7 +394,7 @@ const Admin: NextPage = () => {
     } catch (error) {
       console.log("error", error);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     getUserRole();
@@ -701,9 +402,6 @@ const Admin: NextPage = () => {
 
   const getFacilities = useCallback(async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (user && user.id) {
         const { data, error } = await supabase
           .from("users")
@@ -714,7 +412,7 @@ const Admin: NextPage = () => {
           const { data: data2, error: error2 } = await supabase
             .from("facilities")
             .select("*")
-            .match({ organisation: data[0].organisation, deleted: false });
+            .match({ organisation: data[0].organisation, deleted: "false" });
           if (error2) throw error2;
           if (data2 && data2.length > 0) {
             setFacilities(data2.sort((a, b) => a.name.localeCompare(b.name)));
@@ -724,7 +422,7 @@ const Admin: NextPage = () => {
     } catch (error) {
       console.log("error", error);
     }
-  }, []);
+  }, [supabase, user]);
 
   const getOrdinalSuffix = (i: number) => {
     const j = i % 10,
@@ -820,28 +518,9 @@ const Admin: NextPage = () => {
     createTableData();
   }, [facilities, createTableData]);
 
-  const handleSession = useCallback(async () => {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    if (data && data.session) {
-      setSession(data.session);
-    } else {
-      setSession(null);
-      router.push("/login");
-    }
-  }, [router]);
-
-  useEffect(() => {
-    handleSession();
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-  }, [handleSession]);
-
   const handleSignout = async () => {
     await supabase.auth.signOut();
-    setSession(null);
-    router.push("/login");
+    router.push("/sign-in");
   };
 
   const handlePublish = async () => {
@@ -857,250 +536,248 @@ const Admin: NextPage = () => {
 
   return (
     <>
-      {session && (
-        <AppShell
-          header={
-            <Header
-              height={60}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-              px="md"
-            >
-              <div>
-                <Title order={1} size={isMobile ? "h4" : "h2"}>
-                  Status Indicator
-                </Title>
-              </div>
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <Button onClick={handleSignout} color="gray" variant="outline">
-                  Sign Out
-                </Button>
-                {userRole === "admin" && (
-                  <ActionIcon
-                    onClick={() => setIsTeamMembersModalOpen(true)}
-                    variant="outline"
-                    size="lg"
-                    ml="md"
-                  >
-                    <IconSettings />
-                  </ActionIcon>
-                )}
-              </div>
-            </Header>
-          }
-          styles={(theme) => ({
-            main: {
-              paddingLeft: isMobile ? theme.spacing.sm : theme.spacing.lg,
-              paddingRight: isMobile ? theme.spacing.sm : theme.spacing.lg,
-            },
-          })}
-        >
-          <Head>
-            <title>Status Indicator</title>
-            <meta name="description" content="Status Indicator" />
-            <link rel="icon" href="/favicon.ico" />
-          </Head>
+      <AppShell
+        header={
+          <Header
+            height={60}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+            px="md"
+          >
+            <div>
+              <Title order={1} size={isMobile ? "h4" : "h2"}>
+                Status Indicator
+              </Title>
+            </div>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <Button onClick={handleSignout} color="gray" variant="outline">
+                Sign Out
+              </Button>
+              {userRole === "admin" && (
+                <ActionIcon
+                  onClick={() => setIsTeamMembersModalOpen(true)}
+                  variant="outline"
+                  size="lg"
+                  ml="md"
+                >
+                  <IconSettings />
+                </ActionIcon>
+              )}
+            </div>
+          </Header>
+        }
+        styles={(theme) => ({
+          main: {
+            paddingLeft: isMobile ? theme.spacing.sm : theme.spacing.lg,
+            paddingRight: isMobile ? theme.spacing.sm : theme.spacing.lg,
+          },
+        })}
+      >
+        <Head>
+          <title>Status Indicator</title>
+          <meta name="description" content="Status Indicator" />
+          <link rel="icon" href="/favicon.ico" />
+        </Head>
 
-          <main>
-            <Modal
-              title="Team Members"
-              opened={isTeamMembersModalOpen}
-              onClose={() => setIsTeamMembersModalOpen(false)}
-              fullScreen
-            >
-              <TeamMembers />
-            </Modal>
-            <Modal
-              opened={isAddEditModalOpen}
-              onClose={() => setIsAddEditModalOpen(false)}
-              title={currentFacility ? "Edit Facility" : "Add Facility"}
-              styles={{
-                inner: {
-                  marginBottom: 70,
-                },
-              }}
-            >
-              <AddEditFacilityModal
-                facilities={facilities}
-                facility={currentFacility}
-                isMobile={isMobile}
-                setIsModalOpen={setIsAddEditModalOpen}
-                setFacilities={setFacilities}
-                setIsUnsavedChanges={setIsUnsavedChanges}
-              />
-            </Modal>
-            <Modal
-              opened={isDeleteModalOpen}
-              onClose={() => setIsDeleteModalOpen(false)}
-              title="Delete Facility"
-            >
-              <DeleteFacilityModal
-                facilities={facilities}
-                facility={currentFacility}
-                setIsModalOpen={setIsDeleteModalOpen}
-                setFacilities={setFacilities}
-                setIsUnsavedChanges={setIsUnsavedChanges}
-              />
-            </Modal>
-            <Modal
-              opened={isCopyIFrameModalOpen}
-              onClose={() => setIsCopyIframeModalOpen(false)}
-              title="Copy iFrame"
-            >
-              <CopyIFrameModal />
-            </Modal>
-            <Modal
-              opened={isPublishModalOpen}
-              onClose={() => setIsPublishModalOpen(false)}
-              title="Publish"
-            >
-              <PublishModal
-                setIsModalOpen={setIsPublishModalOpen}
-                handlePublish={handlePublish}
-              />
-            </Modal>
-            <Modal
-              opened={isRefreshModalOpen}
-              onClose={() => setIsRefreshModalOpen(false)}
-              title="Refresh"
-            >
-              <RefreshModal
-                setIsModalOpen={setIsRefreshModalOpen}
-                getFacilities={getFacilities}
-              />
-            </Modal>
-            <Group position="right">
-              {!isMobile ? (
-                <div style={{ display: "flex", gap: "10px" }}>
-                  {isUnsavedChanges ? (
-                    <Button
-                      onClick={() => setIsRefreshModalOpen(true)}
-                      mb="xs"
-                      leftIcon={<IconRefresh />}
-                    >
-                      Refresh
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={getFacilities}
-                      mb="xs"
-                      leftIcon={<IconRefresh />}
-                    >
-                      Refresh
-                    </Button>
-                  )}
+        <main>
+          <Modal
+            title="Team Members"
+            opened={isTeamMembersModalOpen}
+            onClose={() => setIsTeamMembersModalOpen(false)}
+            fullScreen
+          >
+            <TeamMembers />
+          </Modal>
+          <Modal
+            opened={isAddEditModalOpen}
+            onClose={() => setIsAddEditModalOpen(false)}
+            title={currentFacility ? "Edit Facility" : "Add Facility"}
+            styles={{
+              inner: {
+                marginBottom: 70,
+              },
+            }}
+          >
+            <AddEditFacilityModal
+              facilities={facilities}
+              facility={currentFacility}
+              isMobile={isMobile}
+              setIsModalOpen={setIsAddEditModalOpen}
+              setFacilities={setFacilities}
+              setIsUnsavedChanges={setIsUnsavedChanges}
+            />
+          </Modal>
+          <Modal
+            opened={isDeleteModalOpen}
+            onClose={() => setIsDeleteModalOpen(false)}
+            title="Delete Facility"
+          >
+            <DeleteFacilityModal
+              facilities={facilities}
+              facility={currentFacility}
+              setIsModalOpen={setIsDeleteModalOpen}
+              setFacilities={setFacilities}
+              setIsUnsavedChanges={setIsUnsavedChanges}
+            />
+          </Modal>
+          <Modal
+            opened={isCopyIFrameModalOpen}
+            onClose={() => setIsCopyIframeModalOpen(false)}
+            title="Copy iFrame"
+          >
+            <CopyIFrameModal />
+          </Modal>
+          <Modal
+            opened={isPublishModalOpen}
+            onClose={() => setIsPublishModalOpen(false)}
+            title="Publish"
+          >
+            <PublishModal
+              setIsModalOpen={setIsPublishModalOpen}
+              handlePublish={handlePublish}
+            />
+          </Modal>
+          <Modal
+            opened={isRefreshModalOpen}
+            onClose={() => setIsRefreshModalOpen(false)}
+            title="Refresh"
+          >
+            <RefreshModal
+              setIsModalOpen={setIsRefreshModalOpen}
+              getFacilities={getFacilities}
+            />
+          </Modal>
+          <Group position="right">
+            {!isMobile ? (
+              <div style={{ display: "flex", gap: "10px" }}>
+                {isUnsavedChanges ? (
                   <Button
+                    onClick={() => setIsRefreshModalOpen(true)}
+                    mb="xs"
+                    leftIcon={<IconRefresh />}
+                  >
+                    Refresh
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={getFacilities}
+                    mb="xs"
+                    leftIcon={<IconRefresh />}
+                  >
+                    Refresh
+                  </Button>
+                )}
+                <Button
+                  onClick={() => {
+                    setCurrentFacility(null);
+                    setIsCopyIframeModalOpen(true);
+                  }}
+                  mb="xs"
+                  leftIcon={<IconCode />}
+                >
+                  Copy iFrame
+                </Button>
+                <Button
+                  onClick={() => {
+                    setCurrentFacility(null);
+                    setIsAddEditModalOpen(true);
+                  }}
+                  mb="xs"
+                  leftIcon={<IconPlus />}
+                >
+                  Add Facility
+                </Button>
+                <Button
+                  disabled={!isUnsavedChanges}
+                  onClick={() => setIsPublishModalOpen(true)}
+                  mb="xs"
+                  leftIcon={<IconWorldUpload />}
+                >
+                  Publish
+                </Button>
+              </div>
+            ) : (
+              <Affix style={{ width: "100%" }} position={{ bottom: 0 }}>
+                <Card
+                  withBorder
+                  style={{
+                    display: "flex",
+                    width: "100%",
+                    justifyContent: "center",
+                    gap: 10,
+                    backgroundColor: "#f5f5f5",
+                  }}
+                >
+                  {isUnsavedChanges ? (
+                    <ActionIcon
+                      title="Refresh"
+                      variant="filled"
+                      color="blue"
+                      size="xl"
+                      onClick={() => setIsRefreshModalOpen(true)}
+                    >
+                      <IconRefresh />
+                    </ActionIcon>
+                  ) : (
+                    <ActionIcon
+                      title="Refresh"
+                      variant="filled"
+                      color="blue"
+                      size="xl"
+                      onClick={getFacilities}
+                    >
+                      <IconRefresh />
+                    </ActionIcon>
+                  )}
+                  <ActionIcon
+                    title="Copy iFrame"
+                    variant="filled"
+                    color="blue"
+                    size="xl"
                     onClick={() => {
                       setCurrentFacility(null);
                       setIsCopyIframeModalOpen(true);
                     }}
-                    mb="xs"
-                    leftIcon={<IconCode />}
                   >
-                    Copy iFrame
-                  </Button>
-                  <Button
+                    <IconCode />
+                  </ActionIcon>
+                  <ActionIcon
+                    title="Add Facility"
+                    variant="filled"
+                    color="blue"
+                    size="xl"
                     onClick={() => {
                       setCurrentFacility(null);
                       setIsAddEditModalOpen(true);
                     }}
-                    mb="xs"
-                    leftIcon={<IconPlus />}
                   >
-                    Add Facility
-                  </Button>
-                  <Button
+                    <IconPlus />
+                  </ActionIcon>
+                  <ActionIcon
+                    title="Publish"
+                    variant="filled"
+                    color="blue"
+                    size="xl"
                     disabled={!isUnsavedChanges}
                     onClick={() => setIsPublishModalOpen(true)}
-                    mb="xs"
-                    leftIcon={<IconWorldUpload />}
                   >
-                    Publish
-                  </Button>
-                </div>
-              ) : (
-                <Affix style={{ width: "100%" }} position={{ bottom: 0 }}>
-                  <Card
-                    withBorder
-                    style={{
-                      display: "flex",
-                      width: "100%",
-                      justifyContent: "center",
-                      gap: 10,
-                      backgroundColor: "#f5f5f5",
-                    }}
-                  >
-                    {isUnsavedChanges ? (
-                      <ActionIcon
-                        title="Refresh"
-                        variant="filled"
-                        color="blue"
-                        size="xl"
-                        onClick={() => setIsRefreshModalOpen(true)}
-                      >
-                        <IconRefresh />
-                      </ActionIcon>
-                    ) : (
-                      <ActionIcon
-                        title="Refresh"
-                        variant="filled"
-                        color="blue"
-                        size="xl"
-                        onClick={getFacilities}
-                      >
-                        <IconRefresh />
-                      </ActionIcon>
-                    )}
-                    <ActionIcon
-                      title="Copy iFrame"
-                      variant="filled"
-                      color="blue"
-                      size="xl"
-                      onClick={() => {
-                        setCurrentFacility(null);
-                        setIsCopyIframeModalOpen(true);
-                      }}
-                    >
-                      <IconCode />
-                    </ActionIcon>
-                    <ActionIcon
-                      title="Add Facility"
-                      variant="filled"
-                      color="blue"
-                      size="xl"
-                      onClick={() => {
-                        setCurrentFacility(null);
-                        setIsAddEditModalOpen(true);
-                      }}
-                    >
-                      <IconPlus />
-                    </ActionIcon>
-                    <ActionIcon
-                      title="Publish"
-                      variant="filled"
-                      color="blue"
-                      size="xl"
-                      disabled={!isUnsavedChanges}
-                      onClick={() => setIsPublishModalOpen(true)}
-                    >
-                      <IconWorldUpload />
-                    </ActionIcon>
-                  </Card>
-                </Affix>
-              )}
-            </Group>
-            <div style={{ display: isMobile ? "none" : "" }}>
-              <FacilitiesTable tableData={tableData} />
-            </div>
-            <div style={{ display: isMobile ? "" : "none" }}>
-              <MobileFacilities tableData={tableData} />
-            </div>
-          </main>
-        </AppShell>
-      )}
+                    <IconWorldUpload />
+                  </ActionIcon>
+                </Card>
+              </Affix>
+            )}
+          </Group>
+          <div style={{ display: isMobile ? "none" : "" }}>
+            <FacilitiesTable tableData={tableData} />
+          </div>
+          <div style={{ display: isMobile ? "" : "none" }}>
+            <MobileFacilities tableData={tableData} />
+          </div>
+        </main>
+      </AppShell>
     </>
   );
 };
